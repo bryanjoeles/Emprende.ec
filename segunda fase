@@ -1,0 +1,456 @@
+/*
+README (¡Lee esto primero!)
+
+Este proyecto es una app React (Vite) lista para:
+- Autenticación con Google (Firebase Auth)
+- Productos / Órdenes / Coins (Firestore)
+- Carrito y cashback en "CraftCoins"
+- Despliegue automático a GitHub Pages con GitHub Actions
+
+Cómo usar (solo copiar/pegar en un nuevo repositorio):
+1) Crea un repo en GitHub (p. ej. marketplace-artesanos).
+2) Crea estas carpetas/archivos exactamente como aparecen abajo (incluye .github/workflows/deploy.yml).
+3) Haz commit y push (o usa "Add file" → "Upload files" desde la web subiendo cada archivo).
+4) Activa GitHub Pages: Settings → Pages → Source: Deploy from a branch → Branch: gh-pages → /root.
+5) Espera a que corra el workflow "Deploy" (Actions). Se publicará en: https://TU_USUARIO.github.io/NOMBRE_DEL_REPO/
+
+Firebase (opcional pero recomendado ya):
+- Ve a https://console.firebase.google.com → Add project → Web app → copia la config en src/firebase.js
+- Con la config añadida, la app usará Firestore y Auth reales. Sin config, usa datos locales de demo.
+
+NOTA BASE PATH: el workflow compila con base=/<REPO>/ automáticamente. No edites vite.config.js.
+
+*/
+
+// package.json
+// --- copia el bloque tal cual y guárdalo como package.json en la raíz
+{
+  "name": "marketplace-artesanos",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.12.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0"
+  }
+}
+
+// vite.config.js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+export default defineConfig({
+  plugins: [react()],
+  // No seteamos base aquí; el workflow pasará --base=/<repo>/ en build
+})
+
+// index.html (raíz)
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mercado Artesanos</title>
+    <meta name="description" content="Marketplace de emprendedores con coins y cashback" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+// styles.css (raíz, estilos simples)
+:root{--bg:#0b0f14;--panel:#0f1620;--muted:#7d8da1;--text:#e8eef6;--brand:#5ac48d;--brand2:#56a8ff;--outline:#1d2733;--card:#111a26}
+*{box-sizing:border-box}html,body,#root{height:100%}body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:linear-gradient(180deg,#0b0f14,#0a1017 35%,#0b0f14);color:var(--text)}
+a{color:inherit;text-decoration:none}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+header{position:sticky;top:0;background:rgba(10,16,23,.7);backdrop-filter:blur(6px) saturate(1.2);border-bottom:1px solid var(--outline);z-index:10}
+.nav{display:flex;align-items:center;gap:12px;min-height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800}
+.badge{padding:4px 10px;border-radius:999px;border:1px solid var(--outline);background:#122033;color:#b8c4d6}
+.btn{background:var(--brand);color:#081017;border:none;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+.btn.secondary{background:#1b2838;color:var(--text);border:1px solid var(--outline)}
+.input{flex:1;background:var(--panel);border:1px solid var(--outline);border-radius:14px;padding:10px 12px;color:var(--text);outline:none}
+.grid{display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--outline);border-radius:18px;overflow:hidden}
+.card .body{padding:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.stack{display:flex;flex-direction:column;gap:8px}
+.muted{color:var(--muted)}
+.price{font-weight:800}
+footer{border-top:1px solid var(--outline);margin-top:40px}
+
+/* Drawer */
+.drawer{position:fixed;inset:0;display:none}
+.drawer.open{display:block}
+.drawer .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.drawer .panel{position:absolute;right:0;top:0;height:100%;width:min(480px,100%);background:#0d1520;border-left:1px solid var(--outline);padding:18px;display:flex;flex-direction:column;gap:12px}
+.empty{display:grid;place-items:center;padding:32px;border:1px dashed var(--outline);border-radius:18px;background:rgba(255,255,255,.02)}
+
+// src/main.jsx
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App.jsx'
+createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+)
+
+// src/App.jsx
+import { useEffect, useMemo, useState } from 'react'
+import { Routes, Route, Link, useNavigate } from 'react-router-dom'
+import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth'
+import { auth } from './firebase.js'
+import Home from './pages/Home.jsx'
+import Login from './pages/Login.jsx'
+import DashboardCustomer from './pages/DashboardCustomer.jsx'
+import DashboardSeller from './pages/DashboardSeller.jsx'
+
+export default function App(){
+  const [user, setUser] = useState(null)
+  useEffect(()=>{
+    const unsub = auth.onAuthStateChanged(u=> setUser(u))
+    return ()=>unsub()
+  },[])
+  const nav = useNavigate()
+  const provider = useMemo(()=> new GoogleAuthProvider(), [])
+
+  async function doLogin(){
+    await signInWithPopup(auth, provider)
+  }
+  async function doLogout(){ await signOut(auth); nav('/') }
+
+  return (
+    <>
+      <header>
+        <div className="container nav">
+          <Link className="brand" to="/">
+            <span style={{display:'grid',placeItems:'center',width:34,height:34,borderRadius:10,background:'radial-gradient(120% 120% at 80% 0%, #5ac48d 0%, #56a8ff 55%, #334155 100%)'}}>◎</span>
+            <span>Mercado Artesanos</span>
+          </Link>
+          <form onSubmit={e=>e.preventDefault()} style={{display:'flex',gap:8,flex:1}}>
+            <input className="input" placeholder="Buscar productos o categorías…"/>
+            <button className="btn" type="submit">Buscar</button>
+          </form>
+          {user ? (
+            <div className="row" style={{gap:8}}>
+              <span className="badge">{user.displayName?.split(' ')[0]||'Usuario'}</span>
+              <Link className="btn secondary" to="/cliente">Cliente</Link>
+              <Link className="btn secondary" to="/vendedor">Vendedor</Link>
+              <button className="btn" onClick={doLogout}>Salir</button>
+            </div>
+          ):(
+            <button className="btn" onClick={doLogin}>Entrar con Google</button>
+          )}
+        </div>
+      </header>
+      <Routes>
+        <Route path="/" element={<Home user={user} />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/cliente" element={<DashboardCustomer user={user} />} />
+        <Route path="/vendedor" element={<DashboardSeller user={user} />} />
+      </Routes>
+      <footer>
+        <div className="container row">
+          <span>© {new Date().getFullYear()} Mercado Artesanos</span>
+          <span className="muted">React + Firebase · GitHub Pages</span>
+        </div>
+      </footer>
+    </>
+  )
+}
+
+// src/firebase.js
+import { initializeApp, getApps } from 'firebase/app'
+import { getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, getDocs, query, orderBy, serverTimestamp } from 'firebase/firestore'
+
+// 1) Pega aquí tu configuración de Firebase Web App.
+//    Si lo dejas vacío, la app sigue funcionando con datos locales de demo.
+const firebaseConfig = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+}
+
+let app
+if(!getApps().length && firebaseConfig.projectId){
+  app = initializeApp(firebaseConfig)
+}
+
+export const enabled = !!app // true si hay config
+export const auth = app ? getAuth(app) : {
+  onAuthStateChanged: (cb)=>{ cb(null); return ()=>{} },
+}
+export const db = app ? getFirestore(app) : null
+export const provider = app ? new GoogleAuthProvider() : null
+
+// Helpers Firestore (dev-safe)
+export async function ensureUserDoc(user){
+  if(!db || !user) return
+  const ref = doc(db, 'users', user.uid)
+  const snap = await getDoc(ref)
+  if(!snap.exists()){
+    await setDoc(ref, {name: user.displayName||'Usuario', email: user.email||'', coins: 0, role: 'customer', createdAt: serverTimestamp()})
+  }
+}
+export async function addProduct(user, data){
+  if(!db || !user) return null
+  const ref = await addDoc(collection(db,'products'), { ...data, sellerId: user.uid, createdAt: serverTimestamp() })
+  return ref.id
+}
+export async function listProducts(){
+  if(!db){ // demo local
+    return [
+      {id:'p1', name:'Taza de cerámica andina', price:12.50, category:'Hogar', seller:'CeramiQ', img:'☕'},
+      {id:'p2', name:'Café de altura 500g', price:9.90, category:'Gourmet', seller:'Coop. Inti', img:'🌱'},
+      {id:'p3', name:'Pulsera tejida a mano', price:7.20, category:'Accesorios', seller:'ArteChasqui', img:'🧶'},
+      {id:'p4', name:'Mermelada de mortiño', price:5.80, category:'Gourmet', seller:'Sabores Sierra', img:'🍇'}
+    ]
+  }
+  const q = query(collection(db,'products'), orderBy('createdAt','desc'))
+  const snap = await getDocs(q)
+  return snap.docs.map(d=>({id:d.id, ...d.data()}))
+}
+export async function addOrder(user, {items, subtotal, commissionRate, earnRate, pointValue, coinsUsed}){
+  if(!db || !user) return null
+  const orders = collection(db,'orders')
+  const ref = await addDoc(orders, { userId:user.uid, items, subtotal, commissionRate, earnRate, pointValue, coinsUsed, createdAt: serverTimestamp() })
+  const userRef = doc(db,'users',user.uid)
+  const u = await getDoc(userRef)
+  const current = u.exists()? (u.data().coins||0) : 0
+  const toPay = Math.max(0, subtotal - coinsUsed*pointValue)
+  const earn = Math.floor( (toPay) * earnRate / pointValue )
+  await updateDoc(userRef, { coins: Math.max(0, current - coinsUsed + earn) })
+  return ref.id
+}
+export async function getUserCoins(user){
+  if(!db || !user) return 0
+  const ref = doc(db,'users',user.uid)
+  const snap = await getDoc(ref)
+  return snap.exists()? (snap.data().coins||0) : 0
+}
+
+// src/pages/Home.jsx
+import { useEffect, useMemo, useState } from 'react'
+import { listProducts } from '../firebase.js'
+
+const COMMISSION_RATE = 0.10
+const POINT_EARN_RATE = 0.05
+const POINT_VALUE_USD = 0.01
+
+function svg(emoji){
+  const xml = `<svg xmlns='http://www.w3.org/2000/svg' width='700' height='480'>
+    <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='%2356a8ff'/><stop offset='100%' stop-color='%235ac48d'/></linearGradient></defs>
+    <rect width='100%' height='100%' fill='url(%23g)'/>
+    <text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' font-size='140' font-family='Inter,Arial' fill='white'>${emoji}</text>
+  </svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(xml)}`
+}
+
+export default function Home({user}){
+  const [products, setProducts] = useState([])
+  const [cart, setCart] = useState(()=> JSON.parse(localStorage.getItem('cart')||'{}'))
+  const [open, setOpen] = useState(false)
+  const subtotal = useMemo(()=> Object.entries(cart).reduce((s,[id,q])=>{
+    const p = products.find(x=>x.id===id); return s + (p? (p.price||0)*q : 0)
+  },0),[cart,products])
+
+  useEffect(()=>{ listProducts().then(setProducts) },[])
+  useEffect(()=>{ localStorage.setItem('cart', JSON.stringify(cart)) },[cart])
+
+  function add(id){ setCart(c=> ({...c, [id]:(c[id]||0)+1})) }
+  function setQty(id,q){ setCart(c=>{ const n={...c}; if(q<=0) delete n[id]; else n[id]=q; return n }) }
+  function clear(){ setCart({}) }
+
+  return (
+    <main className="container">
+      <div className="row" style={{marginBottom:8}}>
+        <h2 style={{margin:0}}>Productos</h2>
+        <button className="btn secondary" onClick={()=>setOpen(true)}>🛒 Carrito <span className="badge">{Object.values(cart).reduce((a,b)=>a+b,0)}</span></button>
+      </div>
+      <div className="grid" style={{gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))'}}>
+        {products.map(p=> (
+          <article className="card" key={p.id}>
+            <div className="body">
+              <div className="stack">
+                <img src={svg(p.img||'🧺')} alt="" style={{width:'100%',aspectRatio:'4/3',borderRadius:12,border:'1px solid var(--outline)'}}/>
+                <strong>{p.name}</strong>
+                <small className="muted">{p.seller||'Artesano'} · {p.category||'General'}</small>
+                <div className="row">
+                  <div className="price">$ {p.price?.toFixed(2)}</div>
+                  <button className="btn" onClick={()=>add(p.id)}>Agregar</button>
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+      <CartDrawer open={open} onClose={()=>setOpen(false)} products={products} cart={cart} setQty={setQty} clear={clear} subtotal={subtotal} user={user} />
+    </main>
+  )
+}
+
+function CartDrawer({open,onClose,products,cart,setQty,clear,subtotal,user}){
+  const items = Object.entries(cart).map(([id,qty])=>{
+    const p = products.find(x=>x.id===id); return p? {...p, qty} : null
+  }).filter(Boolean)
+  const coinsInUSD = 0 // se calcula en checkout cuando hay Firebase
+  const toPay = Math.max(0, subtotal - coinsInUSD)
+  const willEarn = Math.floor( toPay * POINT_EARN_RATE / POINT_VALUE_USD )
+
+  return (
+    <div className={"drawer "+(open? 'open':'')}>
+      <div className="backdrop" onClick={onClose}></div>
+      <div className="panel">
+        <div className="row"><h3 style={{margin:6}}>Tu carrito</h3><button className="badge" onClick={onClose}>Cerrar</button></div>
+        <div className="stack" style={{overflow:'auto',maxHeight:'50vh',paddingRight:6}}>
+          {items.length? items.map(it=> (
+            <div className="row" key={it.id}>
+              <div className="row" style={{gap:10}}>
+                <img src={svg(it.img||'🧺')} alt="" style={{width:64,height:48,borderRadius:10,border:'1px solid var(--outline)'}}/>
+                <div className="stack">
+                  <strong>{it.name}</strong>
+                  <small className="muted">{it.seller||'Artesano'} · ${it.price?.toFixed(2)}</small>
+                </div>
+              </div>
+              <div className="row" style={{gap:6}}>
+                <button className="badge" onClick={()=>setQty(it.id, (it.qty||0)-1)}>-</button>
+                <span>{it.qty}</span>
+                <button className="badge" onClick={()=>setQty(it.id, (it.qty||0)+1)}>+</button>
+                <button className="badge" onClick={()=>setQty(it.id, 0)} style={{marginLeft:8}}>Quitar</button>
+              </div>
+            </div>
+          )) : (
+            <div className="empty"><div className="stack" style={{alignItems:'center'}}><div style={{fontSize:36}}>🛒</div><strong>Tu carrito está vacío</strong><span className="muted">Agrega productos para continuar.</span></div></div>
+          )}
+        </div>
+        <div className="stack">
+          <div className="row"><span className="muted">Artículos</span><strong>{items.length}</strong></div>
+          <div className="row"><span className="muted">Subtotal</span><strong>$ {subtotal.toFixed(2)}</strong></div>
+          <div className="row"><span className="muted">Comisión plataforma</span><strong>$ {(subtotal*COMMISSION_RATE).toFixed(2)}</strong></div>
+          <div className="row"><span className="muted">Ganará</span><strong>{willEarn} CC</strong></div>
+          <button className="btn" onClick={()=>checkout({items,subtotal,clear,user})}>Completar compra (demo/Firebase)</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+async function checkout({items, subtotal, clear, user}){
+  const { addOrder, enabled } = await import('../firebase.js')
+  if(!user){ alert('Inicia sesión con Google para completar la compra.'); return }
+  if(!items.length){ alert('Carrito vacío.'); return }
+  if(!enabled){ alert('Compra registrada en modo demo (sin Firebase). Agrega tu config en src/firebase.js para persistir.'); clear(); return }
+  const orderId = await addOrder(user, { items: items.map(i=>({id:i.id, name:i.name, price:i.price, qty:i.qty})), subtotal, commissionRate:0.10, earnRate:0.05, pointValue:0.01, coinsUsed:0 })
+  alert(`¡Gracias por tu compra!\nID Pedido: ${orderId}`)
+  clear()
+}
+
+// src/pages/Login.jsx
+export default function Login(){
+  return (
+    <main className="container">
+      <h2>Login</h2>
+      <p>Usa el botón "Entrar con Google" en la barra superior.</p>
+    </main>
+  )
+}
+
+// src/pages/DashboardCustomer.jsx
+import { useEffect, useState } from 'react'
+import { enabled, db, getUserCoins } from '../firebase.js'
+
+export default function DashboardCustomer({user}){
+  const [coins, setCoins] = useState(0)
+  useEffect(()=>{ if(user && enabled){ getUserCoins(user).then(setCoins) } },[user])
+  if(!user) return <main className="container"><p>Inicia sesión para ver tu panel.</p></main>
+  return (
+    <main className="container stack">
+      <h2>Panel de Cliente</h2>
+      <div className="row"><span>Saldo CraftCoins</span><strong className="badge">{coins} CC</strong></div>
+      <p className="muted">Próximamente: historial de compras y niveles (Bronce/Plata/Oro).</p>
+    </main>
+  )
+}
+
+// src/pages/DashboardSeller.jsx
+import { useEffect, useState } from 'react'
+import { enabled, addProduct } from '../firebase.js'
+
+export default function DashboardSeller({user}){
+  const [form, setForm] = useState({name:'', price:'', category:'', img:'🧺'})
+  if(!user) return <main className="container"><p>Inicia sesión para subir productos.</p></main>
+  if(!enabled) return <main className="container"><p>Conecta Firebase (src/firebase.js) para habilitar el alta de productos.</p></main>
+  async function submit(e){
+    e.preventDefault()
+    if(!form.name || !form.price) return alert('Completa nombre y precio')
+    const id = await addProduct(user, { name: form.name, price: Number(form.price), category: form.category||'General', img: form.img })
+    alert('Producto creado: '+id)
+    setForm({name:'',price:'',category:'',img:'🧺'})
+  }
+  return (
+    <main className="container stack" style={{maxWidth:520}}>
+      <h2>Panel de Vendedor</h2>
+      <form className="stack" onSubmit={submit}>
+        <input className="input" placeholder="Nombre" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} />
+        <input className="input" type="number" step="0.01" placeholder="Precio" value={form.price} onChange={e=>setForm({...form, price:e.target.value})} />
+        <input className="input" placeholder="Categoría" value={form.category} onChange={e=>setForm({...form, category:e.target.value})} />
+        <input className="input" placeholder="Emoji (opcional)" value={form.img} onChange={e=>setForm({...form, img:e.target.value})} />
+        <button className="btn" type="submit">Crear producto</button>
+      </form>
+    </main>
+  )
+}
+
+// .github/workflows/deploy.yml
+name: Deploy
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build-deploy:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm ci || npm i
+      - name: Build with repo base
+        run: |
+          REPO_NAME=${{ github.event.repository.name }}
+          npm run build -- --base=/$REPO_NAME/
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
