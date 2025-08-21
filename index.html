@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Marketplace de Emprendedores – MVP</title>
+  <meta name="description" content="Marketplace tipo Amazon para emprendedores y artesanos – MVP 100% front-end (GitHub Pages)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b0f14;--panel:#0f1620;--muted:#7d8da1;--text:#e8eef6;--brand:#5ac48d;--brand-2:#56a8ff;--danger:#ff6b6b;
+      --card:#111a26;--outline:#1d2733;--shadow:0 10px 30px rgba(0,0,0,.25);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%}
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#0b0f14,#0a1017 35%,#0b0f14 100%);color:var(--text)}
+    a{color:inherit;text-decoration:none}
+    .container{max-width:1200px;margin-inline:auto;padding:24px}
+    header{position:sticky;top:0;z-index:20;backdrop-filter:saturate(1.2) blur(6px);background:rgba(10,16,23,.7);border-bottom:1px solid var(--outline)}
+    .nav{display:flex;align-items:center;gap:16px;min-height:64px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:700}
+    .brand-badge{width:34px;height:34px;border-radius:10px;background:radial-gradient(120% 120% at 80% 0%,var(--brand) 0%,var(--brand-2) 55%,#334155 100%);display:grid;place-items:center;box-shadow:var(--shadow)}
+    .brand-badge span{font-weight:800}
+    .search{flex:1;display:flex;gap:8px}
+    .input{flex:1;background:var(--panel);border:1px solid var(--outline);border-radius:14px;padding:12px 14px;color:var(--text);outline:none}
+    .btn{background:var(--brand);border:none;color:#081017;padding:12px 16px;border-radius:12px;font-weight:700;cursor:pointer}
+    .btn.secondary{background:#1b2838;color:var(--text);border:1px solid var(--outline)}
+    .pill{font-size:12px;padding:6px 10px;border-radius:999px;background:#122033;border:1px solid var(--outline);color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+    .sidebar{grid-column:span 3;background:var(--panel);border:1px solid var(--outline);border-radius:18px;padding:16px}
+    .content{grid-column:span 9}
+    @media (max-width:980px){.sidebar{grid-column:1 / -1}.content{grid-column:1 / -1}}
+    .card{background:var(--card);border:1px solid var(--outline);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+    .card .thumb{aspect-ratio:4/3;background:#0e1723;display:grid;place-items:center}
+    .card .thumb img{max-width:90%;max-height:90%}
+    .card .body{padding:14px}
+    .price{font-weight:800}
+    .muted{color:var(--muted)}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .stack{display:flex;flex-direction:column;gap:6px}
+    .gap-2{gap:8px}.gap-3{gap:12px}.gap-4{gap:16px}
+
+    /* Cart Drawer */
+    .drawer{position:fixed;inset:0;display:none}
+    .drawer.open{display:block}
+    .drawer .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+    .drawer .panel{position:absolute;right:0;top:0;height:100%;width:min(480px,100%);background:#0d1520;border-left:1px solid var(--outline);padding:18px;display:flex;flex-direction:column;gap:12px}
+    .scroll{overflow:auto}
+    .divider{height:1px;background:var(--outline);margin:8px 0}
+
+    footer{margin-top:48px;border-top:1px solid var(--outline);padding:24px 0;color:var(--muted)}
+
+    .badge{padding:6px 10px;border-radius:999px;border:1px solid var(--outline)}
+    .level-bronze{background:linear-gradient(90deg,#a1662f,#6e3b11)}
+    .level-silver{background:linear-gradient(90deg,#cfd4da,#8b97a7)}
+    .level-gold{background:linear-gradient(90deg,#ffd166,#c99a00)}
+
+    .empty{display:grid;place-items:center;padding:32px;border:1px dashed var(--outline);border-radius:18px;background:rgba(255,255,255,.02)}
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="container nav">
+      <a class="brand" href="#" aria-label="Inicio">
+        <div class="brand-badge" aria-hidden="true"><span>◎</span></div>
+        <span>Mercado Artesanos</span>
+      </a>
+      <form class="search" onsubmit="event.preventDefault(); doSearch();">
+        <input id="search" class="input" placeholder="Buscar productos, categorías o artesanos…" aria-label="Buscar" />
+        <button class="btn" type="submit">Buscar</button>
+      </form>
+      <button class="btn secondary" onclick="openCart()" aria-label="Abrir carrito">🛒 <span id="cartCount" class="pill" style="margin-left:8px">0</span></button>
+    </div>
+  </header>
+
+  <main class="container" style="margin-top:18px">
+    <div class="grid">
+      <!-- Sidebar: Cuenta / Puntos / Filtros -->
+      <aside class="sidebar stack gap-3">
+        <div class="stack gap-3">
+          <div class="row">
+            <div class="stack">
+              <strong>Tu cuenta</strong>
+              <span class="muted" id="userWelcome">Invitado</span>
+            </div>
+            <button class="pill" onclick="resetDemo()" title="Reiniciar datos locales">Reiniciar</button>
+          </div>
+          <div class="card" aria-live="polite">
+            <div class="body stack gap-3">
+              <div class="row">
+                <strong>Saldo CraftCoins</strong>
+                <span class="badge" id="levelBadge">Bronze</span>
+              </div>
+              <div class="row">
+                <div class="stack">
+                  <span class="muted">Balance</span>
+                  <div style="font-size:28px;font-weight:800"><span id="coinBalance">0</span> CC</div>
+                </div>
+                <div class="stack">
+                  <span class="muted">Valor</span>
+                  <div class="price">$ <span id="coinFiat">0.00</span></div>
+                </div>
+              </div>
+              <small class="muted">Ganas <strong id="earnRateLabel">5%</strong> del valor de la compra en CC. 1 CC = $0.01.</small>
+              <label class="row" style="gap:8px">
+                <input type="checkbox" id="useCoins" onchange="renderCart()" />
+                <span>Usar CC como cashback en el pago</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="stack gap-3">
+          <strong>Filtrar</strong>
+          <div class="row" style="gap:8px;flex-wrap:wrap" id="categoryChips"></div>
+        </div>
+
+        <div class="stack gap-3">
+          <strong>Cómo funciona</strong>
+          <div class="card"><div class="body stack">
+            <small class="muted">Este es un MVP 100% front‑end (sirve en GitHub Pages). El carrito y los puntos se guardan en tu navegador. Integraremos pagos y usuarios en una siguiente fase con servicios como Stripe y Firebase.</small>
+          </div></div>
+        </div>
+      </aside>
+
+      <!-- Content: Products -->
+      <section class="content">
+        <div class="row" style="margin-bottom:8px">
+          <h2 style="margin:0">Productos destacados</h2>
+          <div class="pill">Comisión plataforma: <span id="commissionLabel">10%</span></div>
+        </div>
+        <div id="productGrid" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px"></div>
+        <div id="emptyState" class="empty" style="display:none">
+          <div class="stack" style="align-items:center">
+            <div style="font-size:42px">🔎</div>
+            <strong>No hay resultados</strong>
+            <span class="muted">Prueba otra búsqueda o quita filtros.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Cart Drawer -->
+  <div id="drawer" class="drawer" role="dialog" aria-modal="true" aria-label="Carrito">
+    <div class="backdrop" onclick="closeCart()"></div>
+    <div class="panel">
+      <div class="row">
+        <h3 style="margin:6px 0">Tu carrito</h3>
+        <button class="pill" onclick="closeCart()">Cerrar</button>
+      </div>
+      <div id="cartItems" class="stack scroll" style="min-height:120px;max-height:50vh;padding-right:6px"></div>
+      <div class="divider"></div>
+      <div id="cartSummary" class="stack"></div>
+      <button class="btn" onclick="checkout()">Completar compra</button>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container row" style="justify-content:space-between">
+      <span>© <span id="year"></span> Mercado Artesanos · MVP</span>
+      <span class="muted">Hecho con HTML/CSS/JS · GitHub Pages ready</span>
+    </div>
+  </footer>
+
+  <script>
+    // ====== CONFIGURACIÓN DEL NEGOCIO ======
+    const COMMISSION_RATE = 0.10;          // Comisión de la plataforma (10%)
+    const POINT_EARN_RATE = 0.05;          // Porcentaje de la compra que se convierte en puntos (5%)
+    const POINT_VALUE_USD = 0.01;          // 1 CC = $0.01
+
+    // ====== ESTADO (persistente en localStorage) ======
+    const store = {
+      get cart(){ return JSON.parse(localStorage.getItem('mvp.cart')||'{}'); },
+      set cart(v){ localStorage.setItem('mvp.cart', JSON.stringify(v)); },
+      get coins(){ return Number(localStorage.getItem('mvp.coins')||'0'); },
+      set coins(v){ localStorage.setItem('mvp.coins', String(v)); },
+      get level(){ return localStorage.getItem('mvp.level')||'Bronze'; },
+      set level(v){ localStorage.setItem('mvp.level', v); },
+      get name(){ return localStorage.getItem('mvp.name')||'Invitado'; },
+      set name(v){ localStorage.setItem('mvp.name', v); },
+      get categories(){ return [...new Set(PRODUCTS.map(p=>p.categoria))]; },
+    };
+
+    // ====== DATOS DE PRODUCTOS (mock) ======
+    // Imágenes: SVG inline de bajo peso para evitar dependencias externas.
+    function svgPlaceholder(emoji){
+      return `data:image/svg+xml;utf8,` + encodeURIComponent(
+        `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='450'>
+          <defs>
+            <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+              <stop offset='0%' stop-color='%2356a8ff'/>
+              <stop offset='100%' stop-color='%235ac48d'/>
+            </linearGradient>
+          </defs>
+          <rect width='100%' height='100%' fill='url(%23g)'/>
+          <text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' font-size='120' font-family='Inter,Arial' fill='white'>${emoji}</text>
+        </svg>`
+      );
+    }
+
+    const PRODUCTS = [
+      {id:'p1', nombre:'Taza de cerámica andina', precio:12.50, categoria:'Hogar', vendedor:'CeramiQ', img:svgPlaceholder('☕')},
+      {id:'p2', nombre:'Café de altura 500g', precio:9.90, categoria:'Gourmet', vendedor:'Coop. Inti', img:svgPlaceholder('🌱')},
+      {id:'p3', nombre:'Pulsera tejida a mano', precio:7.20, categoria:'Accesorios', vendedor:'ArteChasqui', img:svgPlaceholder('🧶')},
+      {id:'p4', nombre:'Mermelada de mortiño', precio:5.80, categoria:'Gourmet', vendedor:'Sabores Sierra', img:svgPlaceholder('🍇')},
+      {id:'p5', nombre:'Cuaderno reciclado A5', precio:4.50, categoria:'Papelería', vendedor:'EcoCuadros', img:svgPlaceholder('📓')},
+      {id:'p6', nombre:'Bolso de yute', precio:18.00, categoria:'Accesorios', vendedor:'Manos Suma', img:svgPlaceholder('👜')},
+      {id:'p7', nombre:'Miel de abeja 350g', precio:8.40, categoria:'Gourmet', vendedor:'ApiAndes', img:svgPlaceholder('🍯')},
+      {id:'p8', nombre:'Cuchara de palo tallada', precio:3.50, categoria:'Hogar', vendedor:'Raíz Madera', img:svgPlaceholder('🥄')},
+      {id:'p9', nombre:'Set jabones artesanales', precio:10.90, categoria:'Cuidado personal', vendedor:'Flor de Agua', img:svgPlaceholder('🧼')},
+    ];
+
+    // ====== RENDER UI ======
+    const $ = (sel)=>document.querySelector(sel);
+
+    function fmtMoney(n){ return n.toFixed(2); }
+
+    function renderHeader(){
+      $('#cartCount').textContent = Object.values(store.cart).reduce((a,b)=>a+b,0);
+      $('#year').textContent = new Date().getFullYear();
+      $('#commissionLabel').textContent = (COMMISSION_RATE*100).toFixed(0) + '%';
+      $('#earnRateLabel').textContent = (POINT_EARN_RATE*100).toFixed(0) + '%';
+      $('#userWelcome').textContent = store.name;
+    }
+
+    function renderCoins(){
+      $('#coinBalance').textContent = store.coins.toFixed(0);
+      $('#coinFiat').textContent = fmtMoney(store.coins * POINT_VALUE_USD);
+      const lvl = coinsToLevel(store.coins);
+      store.level = lvl.name;
+      const badge = $('#levelBadge');
+      badge.textContent = lvl.name;
+      badge.className = 'badge ' + lvl.className;
+    }
+
+    function coinsToLevel(coins){
+      if(coins >= 2000) return {name:'Gold', className:'level-gold'};
+      if(coins >= 500) return {name:'Silver', className:'level-silver'};
+      return {name:'Bronze', className:'level-bronze'};
+    }
+
+    let activeCategory = 'Todos';
+    let query = '';
+
+    function renderCategoryChips(){
+      const cats = ['Todos', ...store.categories];
+      const box = $('#categoryChips');
+      box.innerHTML = '';
+      cats.forEach(c=>{
+        const b = document.createElement('button');
+        b.className = 'pill';
+        b.textContent = c;
+        if (c===activeCategory) b.style.borderColor = 'var(--brand)';
+        b.onclick = ()=>{ activeCategory=c; renderProducts(); };
+        box.appendChild(b);
+      });
+    }
+
+    function renderProducts(){
+      const grid = $('#productGrid');
+      let list = PRODUCTS.filter(p=>
+        (activeCategory==='Todos' || p.categoria===activeCategory) &&
+        (p.nombre.toLowerCase().includes(query) || p.categoria.toLowerCase().includes(query) || p.vendedor.toLowerCase().includes(query))
+      );
+      grid.innerHTML = '';
+      $('#emptyState').style.display = list.length? 'none' : 'grid';
+      list.forEach(p=>{
+        const el = document.createElement('article');
+        el.className = 'card';
+        el.innerHTML = `
+          <div class="thumb"><img alt="${p.nombre}" src="${p.img}"/></div>
+          <div class="body stack">
+            <div class="stack">
+              <strong>${p.nombre}</strong>
+              <small class="muted">${p.vendedor} · ${p.categoria}</small>
+            </div>
+            <div class="row">
+              <div class="price">$ ${fmtMoney(p.precio)}</div>
+              <button class="btn" aria-label="Agregar ${p.nombre} al carrito">Agregar</button>
+            </div>
+          </div>`;
+        el.querySelector('button').onclick = ()=> addToCart(p.id);
+        grid.appendChild(el);
+      });
+    }
+
+    function doSearch(){
+      query = $('#search').value.trim().toLowerCase();
+      renderProducts();
+    }
+
+    // ====== CARRITO ======
+    function addToCart(id, qty=1){
+      const c = store.cart; c[id] = (c[id]||0) + qty; store.cart = c; renderHeader(); openCart(); renderCart();
+    }
+    function removeFromCart(id){ const c=store.cart; delete c[id]; store.cart=c; renderHeader(); renderCart(); }
+    function setQty(id,qty){ if(qty<=0) return removeFromCart(id); const c=store.cart; c[id]=qty; store.cart=c; renderHeader(); renderCart(); }
+
+    function cartItems(){
+      const c = store.cart; const items = [];
+      for(const [id,qty] of Object.entries(c)){
+        const p = PRODUCTS.find(x=>x.id===id); if(!p) continue; items.push({...p, qty});
+      }
+      return items;
+    }
+
+    function renderCart(){
+      const items = cartItems();
+      const box = $('#cartItems');
+      box.innerHTML = '';
+      if(!items.length){ box.innerHTML = `<div class='empty'><div class='stack' style='align-items:center'><div style='font-size:36px'>🛒</div><strong>Tu carrito está vacío</strong><span class='muted'>Agrega productos para continuar.</span></div></div>`; }
+      items.forEach(it=>{
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.gap = '12px';
+        row.innerHTML = `
+          <div class='row' style='gap:12px'>
+            <img alt='' src='${it.img}' style='width:64px;height:48px;border-radius:10px;border:1px solid var(--outline)'/>
+            <div class='stack'>
+              <strong>${it.nombre}</strong>
+              <small class='muted'>${it.vendedor} · $${fmtMoney(it.precio)}</small>
+            </div>
+          </div>
+          <div class='row' style='gap:6px'>
+            <button class='pill' onclick='setQty("${it.id}", ${it.qty-1})'>-</button>
+            <span>${it.qty}</span>
+            <button class='pill' onclick='setQty("${it.id}", ${it.qty+1})'>+</button>
+            <button class='pill' style='margin-left:8px' onclick='removeFromCart("${it.id}")'>Quitar</button>
+          </div>`;
+        box.appendChild(row);
+      });
+      // Summary
+      const subtotal = items.reduce((s,it)=> s + it.precio*it.qty, 0);
+      const commission = subtotal * COMMISSION_RATE;
+      const sellerPayout = subtotal - commission;
+      const wantUseCoins = document.getElementById('useCoins').checked;
+      const maxCashback = Math.min(store.coins * POINT_VALUE_USD, subtotal);
+      const cashback = wantUseCoins ? maxCashback : 0;
+      const toPay = Math.max(0, subtotal - cashback);
+      const willEarnCoins = Math.floor( (toPay) * POINT_EARN_RATE / POINT_VALUE_USD );
+
+      $('#cartSummary').innerHTML = `
+        <div class='row'><span class='muted'>Artículos</span><strong>${items.length}</strong></div>
+        <div class='row'><span class='muted'>Subtotal</span><strong>$ ${fmtMoney(subtotal)}</strong></div>
+        <div class='row'><span class='muted'>Cashback (CC)</span><strong>${wantUseCoins? '-$ '+fmtMoney(cashback) : 'No aplicado'}</strong></div>
+        <div class='row'><span class='muted'>A pagar</span><div class='price'>$ ${fmtMoney(toPay)}</div></div>
+        <div class='divider'></div>
+        <div class='row'><span class='muted'>Ganará</span><strong>${willEarnCoins} CC</strong></div>
+        <details>
+          <summary class='muted'>Ver detalle (comisión y payout)</summary>
+          <div class='stack'>
+            <div class='row'><span class='muted'>Comisión plataforma</span><strong>$ ${fmtMoney(commission)}</strong></div>
+            <div class='row'><span class='muted'>Pago a vendedores</span><strong>$ ${fmtMoney(sellerPayout)}</strong></div>
+          </div>
+        </details>`;
+    }
+
+    function checkout(){
+      const items = cartItems(); if(!items.length){ alert('Tu carrito está vacío.'); return; }
+      const subtotal = items.reduce((s,it)=> s + it.precio*it.qty, 0);
+      const useCoins = $('#useCoins').checked;
+      const maxCashback = Math.min(store.coins * POINT_VALUE_USD, subtotal);
+      const cashback = useCoins ? maxCashback : 0;
+      const toPay = Math.max(0, subtotal - cashback);
+      const willEarn = Math.floor( (toPay) * POINT_EARN_RATE / POINT_VALUE_USD );
+
+      // Actualizar saldo de Coins
+      if (useCoins) {
+        const coinsSpent = Math.round(cashback / POINT_VALUE_USD);
+        store.coins = Math.max(0, store.coins - coinsSpent);
+      }
+      store.coins = store.coins + willEarn;
+
+      // Vaciar carrito
+      store.cart = {};
+      renderHeader(); renderCoins(); renderCart();
+      const orderId = 'ORD-' + Math.random().toString(36).slice(2,8).toUpperCase();
+      alert(`¡Gracias por tu compra!\n\nID Pedido: ${orderId}\nGanaste ${willEarn} CC`);
+      closeCart();
+    }
+
+    // ====== Drawer controls ======
+    function openCart(){ $('#drawer').classList.add('open'); renderCart(); }
+    function closeCart(){ $('#drawer').classList.remove('open'); }
+
+    // ====== Utilidades ======
+    function resetDemo(){ if(confirm('Esto borrará tu carrito y saldo de Coins locales.')){ localStorage.clear(); location.reload(); } }
+
+    // ====== Init ======
+    function init(){
+      if(!localStorage.getItem('mvp.name')) store.name = 'Invitado';
+      renderHeader(); renderCoins(); renderCategoryChips(); renderProducts();
+    }
+    init();
+  </script>
+</body>
+</html>
